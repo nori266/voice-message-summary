@@ -21,3 +21,6 @@ DESTINATION_CHAT_ID = os.getenv("VOICE_DESTINATION_CHAT_ID", "0")  # Chat to sen
 # Processing Mode Configuration
 AUTO_PROCESS = True
 TRANSCRIBE_COMMAND = "stt"  # Command to trigger transcription (used when AUTO_PROCESS=False)
+
+# Forward Original Voice Message
+FORWARD_VOICE_MESSAGE = False  # Whether to forward the original voice message to destination chat
