@@ -3,4 +3,6 @@ env/
 .idea/
 .aiignore
 *.session
+*.session-journal
+temp_voice_*.ogg
 __pycache__/

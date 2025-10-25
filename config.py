@@ -13,6 +13,7 @@ GROQ_STT_MODEL = "whisper-large-v3-turbo"
 API_ID = int(os.getenv("API_ID"))
 API_HASH = os.getenv("API_HASH")
 SESSION_NAME = "voice_transcriber_session"
+SESSION_STRING = os.getenv("SESSION_STRING")  # For Heroku deployment (optional, falls back to session file)
 
 # Chat IDs (to be configured)
 SOURCE_CHAT_ID = os.getenv("VOICE_SOURCE_CHAT_ID", "0")  # Chat to monitor for voice messages

@@ -1,22 +1,31 @@
 import asyncio
+import datetime
+import logging
 import os
+import sys
 
 import requests
-import streamlit as st
 from dotenv import load_dotenv
-from streamlit_autorefresh import st_autorefresh
-from telethon import TelegramClient
+from telethon import TelegramClient, events
+from telethon.sessions import StringSession
 
 import config
 
+# Set up logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+logger = logging.getLogger(__name__)
+
 load_dotenv()
 
-# Auto-refresh every 10 seconds
-st_autorefresh(interval=10 * 1000, key="voice-transcriber-refresh")
-st.write("🎤 Voice Transcriber daemon is running...")
-
-# Track processed voice messages to avoid re-processing
+# Track processed messages to avoid duplicates
 processed_messages = set()
+start_time = datetime.datetime.now(datetime.timezone.utc)
 
 
 async def transcribe_audio(audio_file_path):
@@ -39,7 +48,7 @@ async def transcribe_audio(audio_file_path):
             response.raise_for_status()
             return response.text
     except Exception as e:
-        st.error(f"Transcription error: {e}")
+        logger.error(f"Transcription error: {e}")
         return None
 
 
@@ -58,40 +67,52 @@ Provide the summary as a bullet-point list."""
             "messages": [{"role": "user", "content": prompt}],
             "temperature": 0
         }
-        response = requests.post(f"{config.GROQ_BASE_URL}/chat/completions", json=payload, headers=headers, timeout=120)
+        response = requests.post(
+            f"{config.GROQ_BASE_URL}/chat/completions",
+            json=payload,
+            headers=headers,
+            timeout=120
+        )
         response.raise_for_status()
         return response.json()["choices"][0]["message"]["content"]
     except Exception as e:
-        st.error(f"Summarization error: {e}")
+        logger.error(f"Summarization error: {e}")
         return None
 
 
 async def process_voice_message(client, voice_msg):
     """Process a voice message: transcribe, summarize, and send to destination."""
     try:
+        # Check if already processed
+        if voice_msg.id in processed_messages:
+            logger.info(f"Message {voice_msg.id} already processed, skipping")
+            return
+        
         # Download voice message
         audio_path = f"temp_voice_{voice_msg.id}.ogg"
         await voice_msg.download_media(file=audio_path)
         
-        st.write(f"📥 Downloaded voice message {voice_msg.id}")
+        logger.info(f"📥 Downloaded voice message {voice_msg.id}")
         
         # Transcribe
         transcription = await transcribe_audio(audio_path)
         if not transcription:
-            st.error(f"Failed to transcribe voice message {voice_msg.id}")
-            os.remove(audio_path)
+            logger.error(f"Failed to transcribe voice message {voice_msg.id}")
+            if os.path.exists(audio_path):
+                os.remove(audio_path)
             return
         
-        st.write(f"✍️ Transcribed: {transcription[:100]}...")
+        logger.info(f"✍️ Transcribed: {transcription[:100]}...")
         
         # Summarize
         summary = await summarize_text(transcription)
         if not summary:
-            st.error(f"Failed to summarize transcription for message {voice_msg.id}")
-            os.remove(audio_path)
+            logger.error(f"Failed to summarize transcription for message {voice_msg.id}")
+            if os.path.exists(audio_path):
+                os.remove(audio_path)
             return
         
-        st.write(f"📝 Summary created")
+        logger.info(f"📝 Summary created")
         
         # Send summary and voice message to destination chat
         await client.send_message(
@@ -106,61 +127,90 @@ async def process_voice_message(client, voice_msg):
                 voice_msg
             )
         
-        st.success(f"✅ Processed and sent voice message {voice_msg.id}")
+        logger.info(f"✅ Processed and sent voice message {voice_msg.id}")
         
         # Clean up temporary file
-        os.remove(audio_path)
+        if os.path.exists(audio_path):
+            os.remove(audio_path)
         
         # Mark as processed
         processed_messages.add(voice_msg.id)
         
     except Exception as e:
-        st.error(f"Error processing voice message: {e}")
-        if os.path.exists(audio_path):
+        logger.error(f"Error processing voice message: {e}", exc_info=True)
+        if 'audio_path' in locals() and os.path.exists(audio_path):
             os.remove(audio_path)
 
 
-async def check_for_voice_messages():
-    """Main function to check for voice messages and process them."""
-    async with TelegramClient(config.SESSION_NAME, config.API_ID, config.API_HASH) as client:
+async def main():
+    """Main function to run the voice transcriber bot."""
+    logger.info("🚀 Starting Voice Transcriber Bot...")
+    logger.info(f"📅 Start time: {start_time.strftime('%Y-%m-%d %H:%M:%S UTC')}")
+    logger.info(f"📊 Mode: {'AUTO' if config.AUTO_PROCESS else 'COMMAND'}")
+    logger.info(f"📱 Source Chat: {config.SOURCE_CHAT_ID}")
+    logger.info(f"📤 Destination Chat: {config.DESTINATION_CHAT_ID}")
+    
+    # Initialize Telegram client
+    # Use StringSession if SESSION_STRING is set (for Heroku), otherwise use file-based session
+    if config.SESSION_STRING:
+        logger.info("🔐 Using session string from environment variable")
+        client = TelegramClient(StringSession(config.SESSION_STRING), config.API_ID, config.API_HASH)
+    else:
+        logger.info("📁 Using session file")
+        client = TelegramClient(config.SESSION_NAME, config.API_ID, config.API_HASH)
+    
+    await client.start()
+    logger.info("✅ Connected to Telegram")
+    
+    if config.AUTO_PROCESS:
+        # AUTO MODE: Process new voice messages automatically
+        logger.info("🤖 AUTO MODE: Will process voice messages automatically")
         
-        if config.AUTO_PROCESS:
-            # AUTO MODE: Process all new voice messages
-            st.write(f"🤖 AUTO MODE: Processing all voice messages from chat {config.SOURCE_CHAT_ID}")
-            
-            # Get recent messages from source chat
-            async for msg in client.iter_messages(config.SOURCE_CHAT_ID, limit=10):
-                if msg.voice and msg.id not in processed_messages:
-                    await process_voice_message(client, msg)
+        @client.on(events.NewMessage(chats=config.SOURCE_CHAT_ID))
+        async def handle_new_message(event):
+            """Handle new messages in the source chat."""
+            if event.message.voice and event.message.date > start_time:
+                logger.info(f"🎤 New voice message detected: {event.message.id}")
+                await process_voice_message(client, event.message)
         
-        else:
-            # COMMAND MODE: Wait for transcribe command from destination chat
-            st.write(f"⌨️ COMMAND MODE: Waiting for '{config.TRANSCRIBE_COMMAND}' command from chat {config.DESTINATION_CHAT_ID}")
-            
-            # Check for transcribe command in destination chat
-            last_message = await client.get_messages(config.DESTINATION_CHAT_ID, limit=1)
-            
-            if last_message and last_message[0].message:
-                command = last_message[0].message.lower().strip()
+        logger.info("👂 Listening for voice messages...")
+        
+    else:
+        # COMMAND MODE: Wait for transcribe command
+        logger.info(f"⌨️ COMMAND MODE: Waiting for '{config.TRANSCRIBE_COMMAND}' command")
+        
+        @client.on(events.NewMessage(chats=config.DESTINATION_CHAT_ID))
+        async def handle_command(event):
+            """Handle transcribe command in destination chat."""
+            if event.message.message and event.message.message.lower().strip() == config.TRANSCRIBE_COMMAND:
+                logger.info(f"🎯 Transcribe command received!")
                 
-                if command == config.TRANSCRIBE_COMMAND:
-                    st.write(f"🎯 Transcribe command received!")
-                    
-                    # Find unprocessed voice messages in source chat
-                    voice_messages_found = False
-                    async for msg in client.iter_messages(config.SOURCE_CHAT_ID, limit=20):
-                        if msg.voice and msg.id not in processed_messages:
-                            await process_voice_message(client, msg)
-                            voice_messages_found = True
-                    
-                    if not voice_messages_found:
-                        await client.send_message(
-                            config.DESTINATION_CHAT_ID,
-                            "No new voice messages to process."
-                        )
+                # Find and process unprocessed voice messages
+                voice_messages_found = False
+                async for msg in client.iter_messages(config.SOURCE_CHAT_ID, limit=20):
+                    if msg.voice and msg.date > start_time and msg.id not in processed_messages:
+                        await process_voice_message(client, msg)
+                        voice_messages_found = True
+                
+                if not voice_messages_found:
+                    await client.send_message(
+                        config.DESTINATION_CHAT_ID,
+                        "No new voice messages to process."
+                    )
+                    logger.info("No unprocessed voice messages found")
+        
+        logger.info(f"👂 Listening for '{config.TRANSCRIBE_COMMAND}' command...")
+    
+    # Keep the bot running
+    logger.info("✅ Bot is now running. Press Ctrl+C to stop.")
+    await client.run_until_disconnected()
 
 
-try:
-    asyncio.run(check_for_voice_messages())
-except Exception as e:
-    st.error(f"Error in voice transcriber: {e}")
+if __name__ == "__main__":
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logger.info("🛑 Bot stopped by user")
+    except Exception as e:
+        logger.error(f"❌ Fatal error: {e}", exc_info=True)
+        sys.exit(1)
