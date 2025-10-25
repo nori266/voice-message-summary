@@ -99,11 +99,12 @@ async def process_voice_message(client, voice_msg):
             f"🎤 **Voice Message Summary:**\n\n{summary}"
         )
         
-        # Forward the original voice message
-        await client.forward_messages(
-            config.DESTINATION_CHAT_ID,
-            voice_msg
-        )
+        # Forward the original voice message (if configured)
+        if config.FORWARD_VOICE_MESSAGE:
+            await client.forward_messages(
+                config.DESTINATION_CHAT_ID,
+                voice_msg
+            )
         
         st.success(f"✅ Processed and sent voice message {voice_msg.id}")
         
