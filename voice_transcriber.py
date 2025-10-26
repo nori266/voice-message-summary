@@ -54,7 +54,7 @@ async def transcribe_audio(audio_file_path):
 
 async def summarize_text(text):
     """Summarize text to bullet-point list using Groq LLM."""
-    prompt = f"""Summarize the following text into a clear, concise bullet-point list. The summary should be in the same language as the original text. Focus on the key points and main ideas:
+    prompt = f"""Summarize the following text into a clear, concise bullet-point list. The summary should be in the same language as the original text. If the text contains just a few words, return the text as is.
 
 {text}
 
