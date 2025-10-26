@@ -16,8 +16,8 @@ SESSION_NAME = "voice_transcriber_session"
 SESSION_STRING = os.getenv("SESSION_STRING")  # For Heroku deployment (optional, falls back to session file)
 
 # Chat IDs (to be configured)
-SOURCE_CHAT_ID = os.getenv("VOICE_SOURCE_CHAT_ID", "0")  # Chat to monitor for voice messages
-DESTINATION_CHAT_ID = os.getenv("VOICE_DESTINATION_CHAT_ID", "0")  # Chat to send summaries to
+SOURCE_CHAT_ID = int(os.getenv("VOICE_SOURCE_CHAT_ID", "0"))  # Chat to monitor for voice messages
+DESTINATION_CHAT_ID = int(os.getenv("VOICE_DESTINATION_CHAT_ID", "0"))  # Chat to send summaries to
 
 # Processing Mode Configuration
 # The bot now supports BOTH modes simultaneously:
@@ -26,5 +26,18 @@ DESTINATION_CHAT_ID = os.getenv("VOICE_DESTINATION_CHAT_ID", "0")  # Chat to sen
 AUTO_PROCESS = True  # Set to False to disable automatic processing of SOURCE_CHAT_ID
 TRANSCRIBE_COMMAND = "stt"  # Command to trigger transcription (case-insensitive)
 
+# Command Mode Whitelist
+# Comma-separated list of Telegram user IDs allowed to use the transcribe command
+# IMPORTANT: Only users listed here can use the command. If empty, nobody can use it.
+# Example: ALLOWED_USER_IDS=123456789,987654321
+ALLOWED_USER_IDS = os.getenv("ALLOWED_USER_IDS", "")
+
+# Parse allowed user IDs into a set for efficient lookup
+# If no IDs are provided, the set remains empty (nobody can use the command)
+if ALLOWED_USER_IDS:
+    ALLOWED_USERS = set(uid.strip() for uid in ALLOWED_USER_IDS.split(",") if uid.strip())
+else:
+    ALLOWED_USERS = set()  # Empty set = nobody is allowed
+
 # Forward Original Voice Message (only applies to AUTO MODE)
-FORWARD_VOICE_MESSAGE = False  # Whether to forward the original voice message to destination chat
+FORWARD_VOICE_MESSAGE = True  # Whether to forward the original voice message to destination chat

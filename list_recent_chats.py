@@ -1,19 +1,22 @@
 import asyncio
-import os
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
-from dotenv import load_dotenv
 from telethon import TelegramClient
+from telethon.sessions import StringSession
 
-load_dotenv()
-API_ID = int(os.getenv("API_ID"))
-API_HASH = os.getenv("API_HASH")
+import config
 
-# how far back to look (e.g. today only)
-CUTOFF = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+# how far back to look (last week)
+CUTOFF = datetime.now(timezone.utc) - timedelta(days=7)
 
 async def list_recent_chats():
-    async with TelegramClient('parse_session', API_ID, API_HASH) as client:
+    # Use StringSession if SESSION_STRING is set, otherwise use file-based session
+    if config.SESSION_STRING:
+        client = TelegramClient(StringSession(config.SESSION_STRING), config.API_ID, config.API_HASH)
+    else:
+        client = TelegramClient('parse_session', config.API_ID, config.API_HASH)
+    
+    async with client:
         seen_chats = set()
 
         async for dialog in client.iter_dialogs():
