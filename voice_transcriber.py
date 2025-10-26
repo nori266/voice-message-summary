@@ -80,8 +80,15 @@ Provide the summary as a bullet-point list."""
         return None
 
 
-async def process_voice_message(client, voice_msg):
-    """Process a voice message: transcribe, summarize, and send to destination."""
+async def process_voice_message(client, voice_msg, destination_chat_id, forward_voice=False):
+    """Process a voice message: transcribe, summarize, and send to destination.
+    
+    Args:
+        client: Telegram client
+        voice_msg: Voice message to process
+        destination_chat_id: Chat ID to send summary to
+        forward_voice: Whether to forward the original voice message
+    """
     try:
         # Check if already processed
         if voice_msg.id in processed_messages:
@@ -114,20 +121,20 @@ async def process_voice_message(client, voice_msg):
         
         logger.info(f"📝 Summary created")
         
-        # Send summary and voice message to destination chat
+        # Send summary to destination chat
         await client.send_message(
-            config.DESTINATION_CHAT_ID,
+            destination_chat_id,
             f"🎤 **Voice Message Summary:**\n\n{summary}"
         )
         
         # Forward the original voice message (if configured)
-        if config.FORWARD_VOICE_MESSAGE:
+        if forward_voice:
             await client.forward_messages(
-                config.DESTINATION_CHAT_ID,
+                destination_chat_id,
                 voice_msg
             )
         
-        logger.info(f"✅ Processed and sent voice message {voice_msg.id}")
+        logger.info(f"✅ Processed and sent voice message {voice_msg.id} to chat {destination_chat_id}")
         
         # Clean up temporary file
         if os.path.exists(audio_path):
@@ -146,9 +153,10 @@ async def main():
     """Main function to run the voice transcriber bot."""
     logger.info("🚀 Starting Voice Transcriber Bot...")
     logger.info(f"📅 Start time: {start_time.strftime('%Y-%m-%d %H:%M:%S UTC')}")
-    logger.info(f"📊 Mode: {'AUTO' if config.AUTO_PROCESS else 'COMMAND'}")
-    logger.info(f"📱 Source Chat: {config.SOURCE_CHAT_ID}")
-    logger.info(f"📤 Destination Chat: {config.DESTINATION_CHAT_ID}")
+    logger.info("📊 DUAL MODE: AUTO + COMMAND modes enabled")
+    logger.info(f"📱 Source Chat (AUTO mode): {config.SOURCE_CHAT_ID}")
+    logger.info(f"📤 Destination Chat (AUTO mode): {config.DESTINATION_CHAT_ID}")
+    logger.info(f"⌨️ Command trigger: '{config.TRANSCRIBE_COMMAND}' (reply to voice message in ANY chat)")
     
     # Initialize Telegram client
     # Use StringSession if SESSION_STRING is set (for Heroku), otherwise use file-based session
@@ -162,44 +170,64 @@ async def main():
     await client.start()
     logger.info("✅ Connected to Telegram")
     
+    # AUTO MODE: Process new voice messages automatically from SOURCE_CHAT_ID
     if config.AUTO_PROCESS:
-        # AUTO MODE: Process new voice messages automatically
-        logger.info("🤖 AUTO MODE: Will process voice messages automatically")
+        logger.info("🤖 AUTO MODE: Enabled for SOURCE_CHAT_ID")
         
         @client.on(events.NewMessage(chats=config.SOURCE_CHAT_ID))
-        async def handle_new_message(event):
-            """Handle new messages in the source chat."""
+        async def handle_auto_mode(event):
+            """Handle new voice messages in the source chat automatically."""
             if event.message.voice and event.message.date > start_time:
-                logger.info(f"🎤 New voice message detected: {event.message.id}")
-                await process_voice_message(client, event.message)
+                logger.info(f"🎤 [AUTO] New voice message detected: {event.message.id}")
+                await process_voice_message(
+                    client, 
+                    event.message, 
+                    config.DESTINATION_CHAT_ID,
+                    forward_voice=config.FORWARD_VOICE_MESSAGE
+                )
         
-        logger.info("👂 Listening for voice messages...")
-        
+        logger.info("👂 [AUTO] Listening for voice messages in SOURCE_CHAT_ID...")
     else:
-        # COMMAND MODE: Wait for transcribe command
-        logger.info(f"⌨️ COMMAND MODE: Waiting for '{config.TRANSCRIBE_COMMAND}' command")
-        
-        @client.on(events.NewMessage(chats=config.DESTINATION_CHAT_ID))
-        async def handle_command(event):
-            """Handle transcribe command in destination chat."""
-            if event.message.message and event.message.message.lower().strip() == config.TRANSCRIBE_COMMAND:
-                logger.info(f"🎯 Transcribe command received!")
+        logger.info("⏸️ AUTO MODE: Disabled")
+    
+    # COMMAND MODE: Listen for "stt"/"Stt" replies to voice messages in ANY chat
+    logger.info(f"⌨️ COMMAND MODE: Enabled in ALL chats")
+    
+    @client.on(events.NewMessage())
+    async def handle_command_mode(event):
+        """Handle 'stt' command replies to voice messages in any chat."""
+        # Check if message is a reply and contains the command
+        if (event.message.reply_to_msg_id and 
+            event.message.message and 
+            event.message.message.lower().strip() == config.TRANSCRIBE_COMMAND.lower()):
+            
+            logger.info(f"🎯 [COMMAND] '{config.TRANSCRIBE_COMMAND}' command detected in chat {event.chat_id}")
+            
+            # Get the replied-to message
+            try:
+                replied_msg = await event.message.get_reply_message()
                 
-                # Find and process unprocessed voice messages
-                voice_messages_found = False
-                async for msg in client.iter_messages(config.SOURCE_CHAT_ID, limit=20):
-                    if msg.voice and msg.date > start_time and msg.id not in processed_messages:
-                        await process_voice_message(client, msg)
-                        voice_messages_found = True
-                
-                if not voice_messages_found:
-                    await client.send_message(
-                        config.DESTINATION_CHAT_ID,
-                        "No new voice messages to process."
+                # Check if the replied message is a voice message
+                if replied_msg and replied_msg.voice:
+                    logger.info(f"🎤 [COMMAND] Processing voice message {replied_msg.id}")
+                    
+                    # Process the voice message and send summary to the same chat
+                    await process_voice_message(
+                        client,
+                        replied_msg,
+                        event.chat_id,  # Send to the same chat
+                        forward_voice=False  # Don't forward in command mode
                     )
-                    logger.info("No unprocessed voice messages found")
-        
-        logger.info(f"👂 Listening for '{config.TRANSCRIBE_COMMAND}' command...")
+                else:
+                    # Reply that the command must be used on a voice message
+                    await event.reply("⚠️ Please reply to a voice message with 'stt' to transcribe it.")
+                    logger.info(f"[COMMAND] '{config.TRANSCRIBE_COMMAND}' used on non-voice message")
+                    
+            except Exception as e:
+                logger.error(f"Error handling command mode: {e}", exc_info=True)
+                await event.reply("❌ Error processing voice message.")
+    
+    logger.info(f"👂 [COMMAND] Listening for '{config.TRANSCRIBE_COMMAND}' replies to voice messages...")
     
     # Keep the bot running
     logger.info("✅ Bot is now running. Press Ctrl+C to stop.")
