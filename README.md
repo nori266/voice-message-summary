@@ -11,8 +11,7 @@ The bot runs both modes simultaneously.
 Monitors a source chat for new voice messages and automatically sends a summary to a destination chat. Optionally forwards the original voice message alongside the summary.
 
 **Required env vars:**
-- `VOICE_SOURCE_CHAT_ID` — chat to watch for voice messages
-- `VOICE_DESTINATION_CHAT_ID` — chat to send summaries to
+- `CHAT_PAIRS` — comma-separated `source:destination` chat ID pairs, e.g. `CHAT_PAIRS=-1001234567890:-1009876543210,-1001111111111:-1002222222222`
 
 **Optional:**
 - `AUTO_PROCESS=False` — disable auto mode entirely
@@ -43,8 +42,7 @@ See `HEROKU_DEPLOYMENT.md` for deployment instructions.
 | `API_ID` | Yes | Telegram API ID |
 | `API_HASH` | Yes | Telegram API hash |
 | `SESSION_STRING` | Heroku | Telegram session string (falls back to session file) |
-| `VOICE_SOURCE_CHAT_ID` | Auto mode | Source chat ID |
-| `VOICE_DESTINATION_CHAT_ID` | Auto mode | Destination chat ID |
+| `CHAT_PAIRS` | Auto mode | Comma-separated `source:destination` chat ID pairs |
 | `ALLOWED_USER_IDS` | No | Comma-separated user IDs for command mode whitelist |
 | `AUTO_PROCESS` | No | Set to `False` to disable auto mode (default: `True`) |
 | `FORWARD_VOICE_MESSAGE` | No | Set to `False` to skip forwarding original message (default: `True`) |

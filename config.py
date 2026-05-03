@@ -15,15 +15,23 @@ API_HASH = os.getenv("API_HASH")
 SESSION_NAME = "voice_transcriber_session"
 SESSION_STRING = os.getenv("SESSION_STRING")  # For Heroku deployment (optional, falls back to session file)
 
-# Chat IDs (to be configured)
-SOURCE_CHAT_ID = int(os.getenv("VOICE_SOURCE_CHAT_ID", "0"))  # Chat to monitor for voice messages
-DESTINATION_CHAT_ID = int(os.getenv("VOICE_DESTINATION_CHAT_ID", "0"))  # Chat to send summaries to
+# Chat pairs for AUTO MODE
+# Comma-separated list of source:destination chat ID pairs
+# Example: CHAT_PAIRS=-1001234567890:-1009876543210,-1001111111111:-1002222222222
+_chat_pairs_raw = os.getenv("CHAT_PAIRS", "")
+CHAT_PAIRS = {}
+if _chat_pairs_raw:
+    for pair in _chat_pairs_raw.split(","):
+        pair = pair.strip()
+        if ":" in pair:
+            src, dst = pair.split(":", 1)
+            CHAT_PAIRS[int(src.strip())] = int(dst.strip())
 
 # Processing Mode Configuration
 # The bot now supports BOTH modes simultaneously:
-# 1. AUTO MODE: Automatically processes voice messages from SOURCE_CHAT_ID and forwards to DESTINATION_CHAT_ID
+# 1. AUTO MODE: Automatically processes voice messages from source chats and forwards to destination chats
 # 2. COMMAND MODE: In ANY chat, reply "stt" or "Stt" to a voice message to process it in that chat
-AUTO_PROCESS = True  # Set to False to disable automatic processing of SOURCE_CHAT_ID
+AUTO_PROCESS = True  # Set to False to disable automatic processing of source chats
 TRANSCRIBE_COMMAND = "stt"  # Command to trigger transcription (case-insensitive)
 
 # Command Mode Whitelist

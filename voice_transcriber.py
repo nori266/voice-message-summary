@@ -154,8 +154,9 @@ async def main():
     logger.info("🚀 Starting Voice Transcriber Bot...")
     logger.info(f"📅 Start time: {start_time.strftime('%Y-%m-%d %H:%M:%S UTC')}")
     logger.info("📊 DUAL MODE: AUTO + COMMAND modes enabled")
-    logger.info(f"📱 Source Chat (AUTO mode): {config.SOURCE_CHAT_ID}")
-    logger.info(f"📤 Destination Chat (AUTO mode): {config.DESTINATION_CHAT_ID}")
+    logger.info(f"📱 Chat pairs (AUTO mode): {len(config.CHAT_PAIRS)} configured")
+    for src, dst in config.CHAT_PAIRS.items():
+        logger.info(f"   {src} → {dst}")
     logger.info(f"⌨️ Command trigger: '{config.TRANSCRIBE_COMMAND}' (reply to voice message in ANY chat)")
     
     # Log whitelist configuration
@@ -176,23 +177,28 @@ async def main():
     await client.start()
     logger.info("✅ Connected to Telegram")
     
-    # AUTO MODE: Process new voice messages automatically from SOURCE_CHAT_ID
-    if config.AUTO_PROCESS:
-        logger.info("🤖 AUTO MODE: Enabled for SOURCE_CHAT_ID")
-        
-        @client.on(events.NewMessage(chats=config.SOURCE_CHAT_ID))
+    # AUTO MODE: Process new voice messages automatically from configured source chats
+    if config.AUTO_PROCESS and config.CHAT_PAIRS:
+        logger.info(f"🤖 AUTO MODE: Enabled for {len(config.CHAT_PAIRS)} chat pair(s)")
+
+        @client.on(events.NewMessage(chats=list(config.CHAT_PAIRS.keys())))
         async def handle_auto_mode(event):
-            """Handle new voice messages in the source chat automatically."""
+            """Handle new voice messages in source chats automatically."""
             if event.message.voice and event.message.date > start_time:
+                destination_chat_id = config.CHAT_PAIRS.get(event.chat_id)
+                if destination_chat_id is None:
+                    return
                 logger.info(f"🎤 [AUTO] New voice message detected: {event.message.id}")
                 await process_voice_message(
-                    client, 
-                    event.message, 
-                    config.DESTINATION_CHAT_ID,
+                    client,
+                    event.message,
+                    destination_chat_id,
                     forward_voice=config.FORWARD_VOICE_MESSAGE
                 )
-        
-        logger.info("👂 [AUTO] Listening for voice messages in SOURCE_CHAT_ID...")
+
+        logger.info("👂 [AUTO] Listening for voice messages in source chats...")
+    elif config.AUTO_PROCESS and not config.CHAT_PAIRS:
+        logger.warning("⚠️ AUTO MODE: Enabled but no CHAT_PAIRS configured — skipping")
     else:
         logger.info("⏸️ AUTO MODE: Disabled")
     
