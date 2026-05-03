@@ -48,4 +48,5 @@ else:
     ALLOWED_USERS = None  # None = no restriction, all users allowed
 
 # Forward Original Voice Message (only applies to AUTO MODE)
-FORWARD_VOICE_MESSAGE = True  # Whether to forward the original voice message to destination chat
+# Set FORWARD_VOICE_MESSAGE=true in environment to enable forwarding the original voice message
+FORWARD_VOICE_MESSAGE = os.getenv("FORWARD_VOICE_MESSAGE", "false").lower() == "true"
