@@ -28,16 +28,16 @@ TRANSCRIBE_COMMAND = "stt"  # Command to trigger transcription (case-insensitive
 
 # Command Mode Whitelist
 # Comma-separated list of Telegram user IDs allowed to use the transcribe command
-# IMPORTANT: Only users listed here can use the command. If empty, nobody can use it.
+# If not set, all users can use the command.
 # Example: ALLOWED_USER_IDS=123456789,987654321
 ALLOWED_USER_IDS = os.getenv("ALLOWED_USER_IDS", "")
 
 # Parse allowed user IDs into a set for efficient lookup
-# If no IDs are provided, the set remains empty (nobody can use the command)
+# None means no restriction (everyone allowed); a set means only listed users are allowed
 if ALLOWED_USER_IDS:
     ALLOWED_USERS = set(uid.strip() for uid in ALLOWED_USER_IDS.split(",") if uid.strip())
 else:
-    ALLOWED_USERS = set()  # Empty set = nobody is allowed
+    ALLOWED_USERS = None  # None = no restriction, all users allowed
 
 # Forward Original Voice Message (only applies to AUTO MODE)
 FORWARD_VOICE_MESSAGE = True  # Whether to forward the original voice message to destination chat

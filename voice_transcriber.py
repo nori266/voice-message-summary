@@ -159,10 +159,10 @@ async def main():
     logger.info(f"⌨️ Command trigger: '{config.TRANSCRIBE_COMMAND}' (reply to voice message in ANY chat)")
     
     # Log whitelist configuration
-    if config.ALLOWED_USERS:
+    if config.ALLOWED_USERS is not None:
         logger.info(f"🔐 Command whitelist: {len(config.ALLOWED_USERS)} user(s) authorized")
     else:
-        logger.info("🔐 Command whitelist: EMPTY - no users can use the command")
+        logger.info("🔐 Command whitelist: disabled - all users can use the command")
     
     # Initialize Telegram client
     # Use StringSession if SESSION_STRING is set (for Heroku), otherwise use file-based session
@@ -209,18 +209,12 @@ async def main():
             
             logger.info(f"🎯 [COMMAND] '{config.TRANSCRIBE_COMMAND}' command detected from user {event.sender_id} in chat {event.chat_id}")
             
-            # Check if user is authorized (in whitelist)
-            if config.ALLOWED_USERS and str(event.sender_id) not in config.ALLOWED_USERS:
+            # Check if user is authorized (whitelist active and user not in it)
+            if config.ALLOWED_USERS is not None and str(event.sender_id) not in config.ALLOWED_USERS:
                 logger.warning(f"🚫 [COMMAND] Unauthorized user {event.sender_id} attempted to use command")
                 # await event.reply("⛔ You are not authorized to use this command.")
                 return
-            
-            # If whitelist is empty (no users allowed), reject everyone
-            if not config.ALLOWED_USERS:
-                logger.warning(f"🚫 [COMMAND] Command blocked - no users in whitelist")
-                # await event.reply("⛔ You are not authorized to use this command.")
-                return
-            
+
             logger.info(f"✅ [COMMAND] User {event.sender_id} authorized")
             
             # Get the replied-to message
