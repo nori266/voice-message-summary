@@ -6,7 +6,7 @@ load_dotenv()
 # Groq API Configuration
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GROQ_BASE_URL = "https://api.groq.com/openai/v1"
-GROQ_MODEL = "moonshotai/kimi-k2-instruct"
+GROQ_MODEL = "openai/gpt-oss-20b"
 GROQ_STT_MODEL = "whisper-large-v3-turbo"
 
 # Telegram Configuration
